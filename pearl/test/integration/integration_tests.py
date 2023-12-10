@@ -12,6 +12,7 @@ from pearl.action_representation_modules.one_hot_action_representation_module im
 )
 
 from pearl.neural_networks.common.value_networks import DuelingQValueNetwork
+from pearl.neural_networks.sequential_decision_making.actor_networks import LSTMActorNetwork, MHAActorNetwork
 from pearl.pearl_agent import PearlAgent
 from pearl.policy_learners.exploration_modules.common.epsilon_greedy_exploration import (
     EGreedyExploration,
@@ -332,6 +333,78 @@ class IntegrationTests(unittest.TestCase):
                 training_rounds=50,
                 batch_size=64,
                 epsilon=0.1,
+                action_representation_module=OneHotActionTensorRepresentationModule(
+                    max_number_actions=num_actions
+                ),
+            ),
+            replay_buffer=OnPolicyEpisodicReplayBuffer(10_000),
+        )
+        self.assertTrue(
+            target_return_is_reached(
+                agent=agent,
+                env=env,
+                target_return=500,
+                max_episodes=1000,
+                learn=True,
+                learn_after_episode=True,
+                exploit=False,
+            )
+        )
+
+    def test_ppo_lstm_network(self) -> None:
+        """
+        This test is checking if PPO using cumulated returns will eventually get to 500 return for
+        CartPole-v1
+        """
+        env = GymEnvironment("CartPole-v1")
+        assert isinstance(env.action_space, DiscreteActionSpace)
+        num_actions = env.action_space.n
+        agent = PearlAgent(
+            policy_learner=ProximalPolicyOptimization(
+                env.observation_space.shape[0],
+                env.action_space,
+                actor_hidden_dims=[64, 64],
+                critic_hidden_dims=[64, 64],
+                training_rounds=50,
+                batch_size=64,
+                epsilon=0.1,
+                actor_network_type=LSTMActorNetwork,
+                action_representation_module=OneHotActionTensorRepresentationModule(
+                    max_number_actions=num_actions
+                ),
+            ),
+            replay_buffer=OnPolicyEpisodicReplayBuffer(10_000),
+        )
+        self.assertTrue(
+            target_return_is_reached(
+                agent=agent,
+                env=env,
+                target_return=500,
+                max_episodes=1000,
+                learn=True,
+                learn_after_episode=True,
+                exploit=False,
+            )
+        )
+
+    def test_ppo_mha_network(self) -> None:
+        """
+        This test is checking if PPO using cumulated returns will eventually get to 500 return for
+        CartPole-v1
+        """
+        env = GymEnvironment("CartPole-v1")
+        assert isinstance(env.action_space, DiscreteActionSpace)
+        num_actions = env.action_space.n
+        agent = PearlAgent(
+            policy_learner=ProximalPolicyOptimization(
+                env.observation_space.shape[0],
+                env.action_space,
+                actor_hidden_dims=[64, 64],
+                critic_hidden_dims=[64, 64],
+                training_rounds=50,
+                batch_size=64,
+                epsilon=0.1,
+                actor_network_type=MHAActorNetwork,
                 action_representation_module=OneHotActionTensorRepresentationModule(
                     max_number_actions=num_actions
                 ),

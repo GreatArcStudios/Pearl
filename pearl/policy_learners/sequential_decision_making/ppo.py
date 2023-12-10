@@ -21,6 +21,7 @@ from pearl.neural_networks.common.value_networks import (
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
     ActorNetwork,
     VanillaActorNetwork,
+    LSTMActorNetwork
 )
 from pearl.policy_learners.exploration_modules.common.propensity_exploration import (
     PropensityExploration,
