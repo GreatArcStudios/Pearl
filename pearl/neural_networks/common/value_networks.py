@@ -55,7 +55,7 @@ class VanillaValueNetwork(ValueNetwork):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        return self._model(x)
+        return self._model(x.unsqueeze(0)).squeeze(0)
 
     # default initialization in linear and conv layers of a F.sequential model is Kaiming
     def xavier_init(self) -> None:

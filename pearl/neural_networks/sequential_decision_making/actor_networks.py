@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 
 from pearl.api.action_space import ActionSpace
-from pearl.neural_networks.common.utils import mlp_block
+from pearl.neural_networks.common.utils import mha_block, mlp_block, lstm_block
 from pearl.utils.instantiations.spaces.box_action import BoxActionSpace
 
 from torch import Tensor
@@ -116,7 +116,7 @@ class VanillaActorNetwork(ActorNetwork):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self._model(x)
+        return self._model(x.unsqueeze(0)).squeeze(0)
 
     def get_policy_distribution(
         self,
@@ -489,3 +489,194 @@ class GaussianActorNetwork(ActorNetwork):
             log_prob = log_prob.sum(dim=1, keepdim=True)
 
         return log_prob
+
+
+class LSTMActorNetwork(ActorNetwork):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: Optional[List[int]],
+        output_dim: int,
+        action_space: Optional[ActionSpace] = None,
+        lstm_layers: Optional[List[int]] = None,
+    ) -> None:
+        """A Vanilla Actor Network is meant to be used with discrete action spaces.
+           For an input state (batch of states), it outputs a probability distribution over
+           all the actions.
+
+        Args:
+            input_dim: input state dimension (or dim of the state representation)
+            hidden_dims: list of hidden layer dimensions
+            output_dim: number of actions (action_space.n when used with the DiscreteActionSpace
+                        class)
+        """
+        super(LSTMActorNetwork, self).__init__(
+            input_dim, hidden_dims, output_dim, action_space
+        )
+        if not lstm_layers:
+            lstm_layers = [4] * len(hidden_dims)
+
+        self._model: nn.Module = lstm_block(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            lstm_layers=lstm_layers,
+            output_dim=output_dim,
+            last_activation="softmax",
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # check if the input is a batch of states or a single state
+        has_batch_dim = len(x.shape) >= 2
+        if not has_batch_dim:
+            x = x.unsqueeze(0)
+        # check if input has a sequence length dimension
+        has_seq_dim = len(x.shape) >= 3
+        if not has_seq_dim:
+            # add a sequence length dimension as dim 1
+            x = x.unsqueeze(1)
+
+        out = self._model(x)
+
+        if not has_batch_dim:
+            out = out.squeeze(0)
+
+        if not has_seq_dim:
+            out = out.squeeze(1)
+        return out
+
+    def get_policy_distribution(
+        self,
+        state_batch: torch.Tensor,
+        available_actions: Optional[torch.Tensor] = None,
+        unavailable_actions_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Gets a policy distribution from a discrete actor network.
+        The policy distribution is defined by the softmax of the output of the network.
+
+        Args:
+            state_batch: batch of states with shape (batch_size, state_dim) or (state_dim)
+            available_actions and unavailable_actions_mask are not used in this parent class.
+        """
+        policy_distribution = self.forward(
+            state_batch
+        )  # shape (batch_size, available_actions) or (available_actions)
+        return policy_distribution
+
+    def get_action_prob(
+        self,
+        state_batch: torch.Tensor,
+        action_batch: torch.Tensor,
+        available_actions: Optional[torch.Tensor] = None,
+        unavailable_actions_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Gets probabilities of different actions from a discrete actor network.
+        Assumes that the input batch of actions is one-hot encoded
+            (generalize it later).
+
+        Args:
+            state_batch: batch of states with shape (batch_size, input_dim)
+            action_batch: batch of actions with shape (batch_size, output_dim)
+        Returns:
+            action_probs: probabilities of each action in the batch with shape (batch_size)
+        """
+        all_action_probs = self.forward(state_batch)  # shape: (batch_size, output_dim)
+        action_probs = torch.sum(all_action_probs * action_batch, dim=1, keepdim=True)
+
+        return action_probs.view(-1)
+
+
+class MHAActorNetwork(ActorNetwork):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: Optional[List[int]],
+        output_dim: int,
+        action_space: Optional[ActionSpace] = None,
+        mha_layers: Optional[List[int]] = None,
+    ) -> None:
+        """A Vanilla Actor Network is meant to be used with discrete action spaces.
+           For an input state (batch of states), it outputs a probability distribution over
+           all the actions.
+
+        Args:
+            input_dim: input state dimension (or dim of the state representation)
+            hidden_dims: list of hidden layer dimensions
+            output_dim: number of actions (action_space.n when used with the DiscreteActionSpace
+                        class)
+        """
+        super(MHAActorNetwork, self).__init__(
+            input_dim, hidden_dims, output_dim, action_space
+        )
+        if not mha_layers:
+            mha_layers = [4] * len(hidden_dims)
+
+        self._model: nn.Module = mha_block(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            mha_layers=mha_layers,
+            output_dim=output_dim,
+            last_activation="softmax",
+        )
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # check if the input is a batch of states or a single state
+        has_batch_dim = len(x.shape) >= 2
+        if not has_batch_dim:
+            x = x.unsqueeze(0)
+        # check if input has a sequence length dimension
+        has_seq_dim = len(x.shape) >= 3
+        if not has_seq_dim:
+            # add a sequence length dimension as dim 1
+            x = x.unsqueeze(1)
+
+        out = self._model(x)
+
+        if not has_batch_dim:
+            out = out.squeeze(0)
+
+        if not has_seq_dim:
+            out = out.squeeze(1)
+        return out
+
+    def get_policy_distribution(
+        self,
+        state_batch: torch.Tensor,
+        available_actions: Optional[torch.Tensor] = None,
+        unavailable_actions_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Gets a policy distribution from a discrete actor network.
+        The policy distribution is defined by the softmax of the output of the network.
+
+        Args:
+            state_batch: batch of states with shape (batch_size, state_dim) or (state_dim)
+            available_actions and unavailable_actions_mask are not used in this parent class.
+        """
+        policy_distribution = self.forward(
+            state_batch
+        )  # shape (batch_size, available_actions) or (available_actions)
+        return policy_distribution
+
+    def get_action_prob(
+        self,
+        state_batch: torch.Tensor,
+        action_batch: torch.Tensor,
+        available_actions: Optional[torch.Tensor] = None,
+        unavailable_actions_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Gets probabilities of different actions from a discrete actor network.
+        Assumes that the input batch of actions is one-hot encoded
+            (generalize it later).
+
+        Args:
+            state_batch: batch of states with shape (batch_size, input_dim)
+            action_batch: batch of actions with shape (batch_size, output_dim)
+        Returns:
+            action_probs: probabilities of each action in the batch with shape (batch_size)
+        """
+        all_action_probs = self.forward(state_batch)  # shape: (batch_size, output_dim)
+        action_probs = torch.sum(all_action_probs * action_batch, dim=1, keepdim=True)
+
+        return action_probs.view(-1)

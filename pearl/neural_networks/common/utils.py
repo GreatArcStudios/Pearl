@@ -26,17 +26,106 @@ ACTIVATION_MAP = {
 }
 
 
+def lstm_block(
+        input_dim: int,
+        hidden_dims: Optional[List[int]],
+        lstm_layers: Optional[List[int]],
+        output_dim: int = 1,
+        use_batch_norm: bool = False,
+        use_layer_norm: bool = False,
+        hidden_activation: str = "relu",
+        last_activation: Optional[str] = None,
+        dropout_ratio: float = 0.0,
+        use_skip_connections: bool = False,
+        bidirectional: bool = False,
+        **kwargs: Any,
+):
+    """
+    A lstm block which can be reused to create more complex networks
+
+    Args:
+        input_dim: dimension of the input layer
+        hidden_dims: a list of dimensions of the hidden layers
+        lstm_layers: a list of lstm layers
+        output_dim: dimension of the output layer
+        use_batch_norm: whether to use batch_norm or not in the hidden layers
+        hidden_activation: activation function used for hidden layers
+        last_activation: this is optional, if need activation for layer, set this input
+                        otherwise, no activation is applied on last layer
+        dropout_ratio: user needs to call nn.Module.eval to ensure dropout is ignored during act
+    Returns:
+        a nn.Sequential module consisting of lstm layers
+    """
+    return LSTMBlock(
+        input_dim,
+        hidden_dims,
+        lstm_layers,
+        output_dim,
+        use_batch_norm,
+        use_layer_norm,
+        hidden_activation,
+        last_activation,
+        dropout_ratio,
+        use_skip_connections,
+        bidirectional,
+        **kwargs,
+    )
+
+def mha_block(
+        input_dim: int,
+        hidden_dims: Optional[List[int]],
+        mha_layers: Optional[List[int]],
+        output_dim: int = 1,
+        use_batch_norm: bool = False,
+        use_layer_norm: bool = False,
+        hidden_activation: str = "relu",
+        last_activation: Optional[str] = None,
+        dropout_ratio: float = 0.0,
+        use_skip_connections: bool = False,
+        **kwargs: Any,
+):
+    """
+    A mha block which can be reused to create more complex networks
+
+    Args:
+        input_dim: dimension of the input layer
+        hidden_dims: a list of dimensions of the hidden layers
+        mha_layers: a list of mha layers
+        output_dim: dimension of the output layer
+        use_batch_norm: whether to use batch_norm or not in the hidden layers
+        hidden_activation: activation function used for hidden layers
+        last_activation: this is optional, if need activation for layer, set this input
+                        otherwise, no activation is applied on last layer
+        dropout_ratio: user needs to call nn.Module.eval to ensure dropout is ignored during act
+    Returns:
+        a nn.Sequential module consisting of mha layers
+    """
+    return MHABlock(
+        input_dim,
+        hidden_dims,
+        mha_layers,
+        output_dim,
+        use_batch_norm,
+        use_layer_norm,
+        hidden_activation,
+        last_activation,
+        dropout_ratio,
+        use_skip_connections,
+        **kwargs,
+    )
+
+
 def mlp_block(
-    input_dim: int,
-    hidden_dims: Optional[List[int]],
-    output_dim: int = 1,
-    use_batch_norm: bool = False,
-    use_layer_norm: bool = False,
-    hidden_activation: str = "relu",
-    last_activation: Optional[str] = None,
-    dropout_ratio: float = 0.0,
-    use_skip_connections: bool = False,
-    **kwargs: Any,
+        input_dim: int,
+        hidden_dims: Optional[List[int]],
+        output_dim: int = 1,
+        use_batch_norm: bool = False,
+        use_layer_norm: bool = False,
+        hidden_activation: str = "relu",
+        last_activation: Optional[str] = None,
+        dropout_ratio: float = 0.0,
+        use_skip_connections: bool = False,
+        **kwargs: Any,
 ) -> nn.Module:
     """
     A simple MLP which can be reused to create more complex networks
@@ -102,12 +191,12 @@ def mlp_block(
 
 
 def conv_block(
-    input_channels_count: int,
-    output_channels_list: List[int],
-    kernel_sizes: List[int],
-    strides: List[int],
-    paddings: List[int],
-    use_batch_norm: bool = False,
+        input_channels_count: int,
+        output_channels_list: List[int],
+        kernel_sizes: List[int],
+        strides: List[int],
+        paddings: List[int],
+        use_batch_norm: bool = False,
 ) -> nn.Module:
     """
     Reminder: torch.Conv2d layers expect inputs as (batch_size, in_channels, height, width)
@@ -125,7 +214,7 @@ def conv_block(
     """
     layers = []
     for out_channels, kernel_size, stride, padding in zip(
-        output_channels_list, kernel_sizes, strides, paddings
+            output_channels_list, kernel_sizes, strides, paddings
     ):
         conv_layer = nn.Conv2d(
             input_channels_count,
@@ -160,11 +249,11 @@ def uniform_init_weights(m: nn.Module) -> None:
 
 
 def update_target_network(
-    target_network: nn.Module, source_network: nn.Module, tau: float
+        target_network: nn.Module, source_network: nn.Module, tau: float
 ) -> None:
     # Q_target = (1 - tao) * Q_target + tao*Q
     for target_param, source_param in zip(
-        target_network.parameters(), source_network.parameters()
+            target_network.parameters(), source_network.parameters()
     ):
         if target_param is source_param:
             # skip soft-updating when the target network shares the parameter with
@@ -175,9 +264,9 @@ def update_target_network(
 
 
 def ensemble_forward(
-    models: Union[nn.ModuleList, List[nn.Module]],
-    features: torch.Tensor,
-    use_for_loop: bool = True,
+        models: Union[nn.ModuleList, List[nn.Module]],
+        features: torch.Tensor,
+        use_for_loop: bool = True,
 ) -> torch.Tensor:
     """
     Run forward pass on several models and return their outputs stacked as a tensor.
@@ -210,9 +299,9 @@ def ensemble_forward(
         features = features.permute((1, 0, 2))
 
         def wrapper(
-            params: Dict[str, torch.Tensor],
-            buffers: Dict[str, torch.Tensor],
-            data: torch.Tensor,
+                params: Dict[str, torch.Tensor],
+                buffers: Dict[str, torch.Tensor],
+                data: torch.Tensor,
         ) -> torch.Tensor:
             return torch.func.functional_call(models[0], (params, buffers), data)
 
@@ -226,9 +315,9 @@ def ensemble_forward(
 
 
 def update_target_networks(
-    list_of_target_networks: Union[nn.ModuleList, List[nn.Module]],
-    list_of_source_networks: Union[nn.ModuleList, List[nn.Module]],
-    tau: float,
+        list_of_target_networks: Union[nn.ModuleList, List[nn.Module]],
+        list_of_source_networks: Union[nn.ModuleList, List[nn.Module]],
+        tau: float,
 ) -> None:
     """
     Args:
@@ -238,6 +327,165 @@ def update_target_networks(
     """
     # Q_target = (1 - tao) * Q_target + tao*Q
     for target_network, source_network in zip(
-        list_of_target_networks, list_of_source_networks
+            list_of_target_networks, list_of_source_networks
     ):
         update_target_network(target_network, source_network, tau)
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import logging
+from typing import List, Optional, Any
+
+
+class LSTMBlock(nn.Module):
+    def __init__(
+            self,
+            input_dim: int,
+            hidden_dims: Optional[List[int]],
+            lstm_layers: Optional[List[int]],
+            output_dim: int = 1,
+            use_batch_norm: bool = False,
+            use_layer_norm: bool = False,
+            hidden_activation: str = "relu",
+            last_activation: Optional[str] = None,
+            dropout_ratio: float = 0.0,
+            use_skip_connections: bool = False,
+            bidirectional: bool = True,
+            **kwargs: Any,
+    ):
+        super(LSTMBlock, self).__init__()
+
+        if len(lstm_layers) != len(hidden_dims):
+            raise ValueError("lstm_layers and hidden_dims should have the same length")
+
+        if hidden_dims is None:
+            hidden_dims = []
+        self.dims = [input_dim] + hidden_dims + [output_dim]
+        self.lstm_layers = nn.ModuleList()
+        self.batch_norm_layers = nn.ModuleList()
+        self.layer_norm_layers = nn.ModuleList()
+        self.dropout = dropout_ratio
+        self.use_batch_norm = use_batch_norm
+        self.use_layer_norm = use_layer_norm
+        self.hidden_activation = hidden_activation
+        self.last_activation = last_activation
+        self.use_skip_connections = use_skip_connections
+        self.bidirectional = bidirectional
+
+        for i, (input_dim_current_layer, output_dim_current_layer, lstm_num_layers_current_layer) in enumerate(
+                zip(self.dims[:-2], self.dims[1:-1], lstm_layers)):
+            self.lstm_layers.append(
+                nn.LSTM(
+                    input_dim_current_layer,
+                    output_dim_current_layer,
+                    lstm_num_layers_current_layer,
+                    batch_first=True,
+                    bidirectional=bidirectional,
+                )
+            )
+
+            if self.use_batch_norm:
+                self.batch_norm_layers.append(nn.BatchNorm1d(output_dim_current_layer))
+            if self.use_layer_norm:
+                self.layer_norm_layers.append(nn.LayerNorm(output_dim_current_layer))
+
+        self.final_layer = nn.Linear(self.dims[-2], self.dims[-1])
+
+    def forward(self, x):
+        for i, lstm_layer in enumerate(self.lstm_layers):
+            x, _ = lstm_layer(x)
+
+            if self.use_layer_norm:
+                x = self.layer_norm_layers[i](x)
+
+            if self.dropout > 0:
+                x = F.dropout(x, p=self.dropout, training=self.training)
+
+            x = F.__dict__[self.hidden_activation](x)
+
+            if self.use_batch_norm:
+                x = self.batch_norm_layers[i](x)
+
+        x = self.final_layer(x)
+
+        if self.last_activation is not None:
+            x = F.__dict__[self.last_activation](x)
+
+        return x
+
+class MHABlock(nn.Module):
+    def __init__(
+            self,
+            input_dim: int,
+            hidden_dims: Optional[List[int]],
+            mha_layers: Optional[List[int]],
+            output_dim: int = 1,
+            use_batch_norm: bool = False,
+            use_layer_norm: bool = False,
+            hidden_activation: str = "relu",
+            last_activation: Optional[str] = None,
+            dropout_ratio: float = 0.0,
+            use_skip_connections: bool = False,
+            **kwargs: Any,
+    ):
+        super(MHABlock, self).__init__()
+
+        if len(mha_layers) != len(hidden_dims):
+            raise ValueError("mha_layers and hidden_dims should have the same length")
+
+        if hidden_dims is None:
+            hidden_dims = []
+        self.dims = [input_dim] + hidden_dims + [output_dim]
+        self.mha_layers = nn.ModuleList()
+        self.batch_norm_layers = nn.ModuleList()
+        self.layer_norm_layers = nn.ModuleList()
+        self.dropout = dropout_ratio
+        self.use_batch_norm = use_batch_norm
+        self.use_layer_norm = use_layer_norm
+        self.hidden_activation = hidden_activation
+        self.last_activation = last_activation
+        self.use_skip_connections = use_skip_connections
+
+        for i, (input_dim_current_layer, output_dim_current_layer, mha_num_layers_current_layer) in enumerate(
+                zip(self.dims[:-2], self.dims[1:-1], mha_layers)):
+            self.mha_layers.append(
+                nn.TransformerEncoderLayer(
+                    input_dim_current_layer,
+                    nhead=4,
+                    dim_feedforward=2048,
+                )
+            )
+            self.mha_layers.append(
+                nn.Linear(input_dim_current_layer, output_dim_current_layer)
+            )
+
+            if self.use_batch_norm:
+                self.batch_norm_layers.append(nn.BatchNorm1d(output_dim_current_layer))
+            if self.use_layer_norm:
+                self.layer_norm_layers.append(nn.LayerNorm(output_dim_current_layer))
+
+        self.final_layer = nn.Linear(self.dims[-2], self.dims[-1])
+
+    def forward(self, x):
+        for i, mha_layer in enumerate(self.mha_layers):
+            x = mha_layer(x)
+
+            if self.use_layer_norm:
+                x = self.layer_norm_layers[i](x)
+
+            if self.dropout > 0:
+                x = F.dropout(x, p=self.dropout, training=self.training)
+
+            x = F.__dict__[self.hidden_activation](x)
+
+            if self.use_batch_norm:
+                x = self.batch_norm_layers[i](x)
+
+        x = self.final_layer(x)
+
+        if self.last_activation is not None:
+            x = F.__dict__[self.last_activation](x)
+
+        return x
