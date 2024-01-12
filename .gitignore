@@ -1,0 +1,6 @@
+
+pearl/__pycache__/
+
+*.pyc
+
+.idea/
