@@ -698,15 +698,15 @@ class TestIntegration(unittest.TestCase):
         Due to randomness in games, we check on moving avarage of episode returns
         """
         env = GymEnvironment("Pendulum-v1")
-        state_dim = 128
+        state_dim = 512
         agent = PearlAgent(
             policy_learner=DeepDeterministicPolicyGradient(
                 state_dim=state_dim,
                 action_space=env.action_space,
                 actor_hidden_dims=[400, 300],
                 critic_hidden_dims=[400, 300],
-                critic_learning_rate=1e-2,
-                actor_learning_rate=1e-3,
+                critic_learning_rate=1e-8,
+                actor_learning_rate=1e-8,
                 training_rounds=5,
                 actor_soft_update_tau=0.05,
                 critic_soft_update_tau=0.05,
@@ -718,10 +718,10 @@ class TestIntegration(unittest.TestCase):
             history_summarization_module=MambaHistorySummarizationModule(
                 observation_dim=env.observation_space.shape[0],
                 action_dim=env.action_space.shape[0],
-                num_layers=1,
-                history_length=200,
+                num_layers=4,
+                history_length=20,
                 parallel_scan=True,
-                hidden_dim=env.observation_space.shape[0]+env.action_space.shape[0],
+                hidden_dim=256,
                 state_dim=state_dim
             ),
             replay_buffer=FIFOOffPolicyReplayBuffer(500_000),

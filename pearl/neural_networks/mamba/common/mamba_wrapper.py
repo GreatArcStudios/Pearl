@@ -47,13 +47,15 @@ class MambaWrapper(nn.Module):
         self.layers = nn.ModuleList()
 
         if self.config.input_dim != self.config.d_model:
-            self.layers.extend(nn.ModuleList([
+            self.layers.extend(
                 self._create_mamba_layer(input_dim),
+                )
+            self.layers.append(
                 nn.Linear(self.config.input_dim, self.config.d_model)
-            ]))
+            )
         for i in range(self.num_mamba_layers):
             self.layers.extend(self._create_mamba_layer(self.config.d_model))
-            if i != self.num_mamba_layers - 1:
+            if i == self.num_mamba_layers - 1:
                 self.layers.append(nn.Linear(self.config.d_model, self.config.state_dim))
 
         if self.config.d_model != self.config.state_dim:
