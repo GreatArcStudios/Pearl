@@ -11,6 +11,7 @@ import torch
 from pearl.history_summarization_modules.lstm_history_summarization_module import (
     LSTMHistorySummarizationModule,
 )
+from pearl.history_summarization_modules.mamba_history_summmarization_module import MambaHistorySummarizationModule
 from pearl.history_summarization_modules.stacking_history_summarization_module import (
     StackingHistorySummarizationModule,
 )
@@ -19,7 +20,7 @@ from pearl.history_summarization_modules.stacking_history_summarization_module i
 class TestHistorySummarizationModules(unittest.TestCase):
     def setUp(self) -> None:
         self.observation_dim: int = 10
-        self.action_dim: int = 2
+        self.action_dim: int = 1
         self.history_length: int = 5
 
     def test_stacking_history_summarizer(self) -> None:
@@ -49,6 +50,50 @@ class TestHistorySummarizationModules(unittest.TestCase):
             action_dim=self.action_dim,
             history_length=self.history_length,
             hidden_dim=self.observation_dim + self.action_dim,
+        )
+        for _ in range(10):
+            observation = torch.rand((1, self.observation_dim))
+            action = torch.rand((1, self.action_dim))
+            subjective_state = summarization_module.summarize_history(
+                observation, action
+            )
+            self.assertEqual(
+                subjective_state.shape[0], self.observation_dim + self.action_dim
+            )
+
+    def test_minimal_mamba_history_summarizer(self) -> None:
+        """
+        Easy test for minimal mamba (no parallel scan) history summarization module.
+        """
+        summarization_module = MambaHistorySummarizationModule(
+            observation_dim=self.observation_dim,
+            action_dim=self.action_dim,
+            history_length=self.history_length,
+            hidden_dim=self.observation_dim + self.action_dim,
+            parallel_scan=False
+        )
+        for _ in range(10):
+            observation = torch.rand((1, self.observation_dim))
+            action = torch.rand((1, self.action_dim))
+            subjective_state = summarization_module.summarize_history(
+                observation, action
+            )
+            self.assertEqual(
+                subjective_state.shape[0], self.observation_dim + self.action_dim
+            )
+
+    def test_parallel_mamba_history_summarizer(self) -> None:
+        """
+        Easy test for parallel mamba history summarization module.
+        """
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        summarization_module = MambaHistorySummarizationModule(
+            observation_dim=self.observation_dim,
+            action_dim=self.action_dim,
+            history_length=self.history_length,
+            hidden_dim=self.observation_dim + self.action_dim,
+            parallel_scan=True,
+            device=device
         )
         for _ in range(10):
             observation = torch.rand((1, self.observation_dim))

@@ -10,6 +10,8 @@ import unittest
 from pearl.action_representation_modules.one_hot_action_representation_module import (
     OneHotActionTensorRepresentationModule,
 )
+from pearl.history_summarization_modules.lstm_history_summarization_module import LSTMHistorySummarizationModule
+from pearl.history_summarization_modules.mamba_history_summmarization_module import MambaHistorySummarizationModule
 
 from pearl.neural_networks.common.value_networks import DuelingQValueNetwork
 from pearl.neural_networks.sequential_decision_making.actor_networks import LSTMActorNetwork, MHAActorNetwork
@@ -244,8 +246,8 @@ class TestIntegration(unittest.TestCase):
         )
 
     def test_dueling_dqn(
-        self,
-        batch_size: int = 128,
+            self,
+            batch_size: int = 128,
     ) -> None:
         env = GymEnvironment("CartPole-v1")
         assert isinstance(env.action_space, DiscreteActionSpace)
@@ -459,6 +461,47 @@ class TestIntegration(unittest.TestCase):
             )
         )
 
+    def test_sac_lstm_summarization(self) -> None:
+        """
+        This test is checking if SAC will eventually get to 500 return for CartPole-v1
+        """
+        env = GymEnvironment("CartPole-v1")
+        assert isinstance(env.action_space, DiscreteActionSpace)
+        num_actions = env.action_space.n
+        agent = PearlAgent(
+            policy_learner=SoftActorCritic(
+                state_dim=env.observation_space.shape[0],
+                action_space=env.action_space,
+                actor_hidden_dims=[64, 64, 64],
+                critic_hidden_dims=[64, 64, 64],
+                training_rounds=100,
+                batch_size=100,
+                entropy_coef=0.1,
+                actor_learning_rate=0.0001,
+                critic_learning_rate=0.0003,
+                action_representation_module=OneHotActionTensorRepresentationModule(
+                    max_number_actions=num_actions
+                ),
+            ),
+            replay_buffer=FIFOOffPolicyReplayBuffer(50000),
+            history_summarization_module=LSTMHistorySummarizationModule(
+                observation_dim=env.observation_space.shape[0],
+                action_dim=env.action_space.shape[0],
+                hidden_dim=env.observation_space.shape[0]
+            )
+        )
+        self.assertTrue(
+            target_return_is_reached(
+                agent=agent,
+                env=env,
+                target_return=500,
+                max_episodes=1_000,
+                learn=True,
+                learn_after_episode=True,
+                exploit=False,
+            )
+        )
+
     def test_continuous_sac(self) -> None:
         """
         This test is checking if continuous SAC will eventually learn for Pendulum-v1.
@@ -479,6 +522,44 @@ class TestIntegration(unittest.TestCase):
                 critic_learning_rate=0.001,
             ),
             replay_buffer=FIFOOffPolicyReplayBuffer(100000),
+        )
+        self.assertTrue(
+            target_return_is_reached(
+                agent=agent,
+                env=env,
+                target_return=-250,
+                max_episodes=1500,
+                learn=True,
+                learn_after_episode=True,
+                exploit=False,
+            )
+        )
+
+    def test_continuous_sac_lstm_summarization(self) -> None:
+        """
+        This test is checking if continuous SAC will eventually learn for Pendulum-v1.
+        The target is to get moving average of returns to -250 or less.
+        """
+        env = GymEnvironment("Pendulum-v1")
+
+        agent = PearlAgent(
+            policy_learner=ContinuousSoftActorCritic(
+                state_dim=env.observation_space.shape[0],
+                action_space=env.action_space,
+                actor_hidden_dims=[64, 64],
+                critic_hidden_dims=[64, 64],
+                training_rounds=50,
+                batch_size=100,
+                entropy_coef=0.1,
+                actor_learning_rate=0.001,
+                critic_learning_rate=0.001,
+            ),
+            replay_buffer=FIFOOffPolicyReplayBuffer(100000),
+            history_summarization_module=LSTMHistorySummarizationModule(
+                observation_dim=env.observation_space.shape[0],
+                action_dim=env.action_space.shape[0],
+                hidden_dim=env.observation_space.shape[0]
+            )
         )
         self.assertTrue(
             target_return_is_reached(
@@ -551,6 +632,99 @@ class TestIntegration(unittest.TestCase):
                 ),
             ),
             replay_buffer=FIFOOffPolicyReplayBuffer(50000),
+        )
+        self.assertTrue(
+            target_return_is_reached(
+                agent=agent,
+                env=env,
+                target_return=-250,
+                max_episodes=1000,
+                learn=True,
+                learn_after_episode=True,
+                exploit=False,
+                check_moving_average=True,
+            )
+        )
+
+    def test_ddpg_lstm_summarization(self) -> None:
+        """
+        This test is checking if DDPG will eventually learn on Pendulum-v1
+        If learns well, return will converge above -250
+        Due to randomness in games, we check on moving avarage of episode returns
+        """
+        env = GymEnvironment("Pendulum-v1")
+        agent = PearlAgent(
+            policy_learner=DeepDeterministicPolicyGradient(
+                state_dim=2048,
+                action_space=env.action_space,
+                actor_hidden_dims=[400, 300],
+                critic_hidden_dims=[400, 300],
+                critic_learning_rate=1e-2,
+                actor_learning_rate=1e-3,
+                training_rounds=5,
+                actor_soft_update_tau=0.05,
+                critic_soft_update_tau=0.05,
+                exploration_module=NormalDistributionExploration(
+                    mean=0,
+                    std_dev=0.2,
+                ),
+            ),
+            history_summarization_module=LSTMHistorySummarizationModule(
+                observation_dim=env.observation_space.shape[0],
+                action_dim=env.action_space.shape[0],
+                hidden_dim=2048,
+                num_layers=1,
+                history_length=200
+            ),
+            replay_buffer=FIFOOffPolicyReplayBuffer(50000),
+        )
+        self.assertTrue(
+            target_return_is_reached(
+                agent=agent,
+                env=env,
+                target_return=-250,
+                max_episodes=1000,
+                learn=True,
+                learn_after_episode=True,
+                exploit=False,
+                check_moving_average=True,
+            )
+        )
+
+    def test_ddpg_mamba_summarization(self) -> None:
+        """
+        This test is checking if DDPG will eventually learn on Pendulum-v1
+        If learns well, return will converge above -250
+        Due to randomness in games, we check on moving avarage of episode returns
+        """
+        env = GymEnvironment("Pendulum-v1")
+        state_dim = 128
+        agent = PearlAgent(
+            policy_learner=DeepDeterministicPolicyGradient(
+                state_dim=state_dim,
+                action_space=env.action_space,
+                actor_hidden_dims=[400, 300],
+                critic_hidden_dims=[400, 300],
+                critic_learning_rate=1e-2,
+                actor_learning_rate=1e-3,
+                training_rounds=5,
+                actor_soft_update_tau=0.05,
+                critic_soft_update_tau=0.05,
+                exploration_module=NormalDistributionExploration(
+                    mean=0,
+                    std_dev=0.2,
+                ),
+            ),
+            history_summarization_module=MambaHistorySummarizationModule(
+                observation_dim=env.observation_space.shape[0],
+                action_dim=env.action_space.shape[0],
+                num_layers=1,
+                history_length=200,
+                parallel_scan=True,
+                hidden_dim=env.observation_space.shape[0]+env.action_space.shape[0],
+                state_dim=state_dim
+            ),
+            replay_buffer=FIFOOffPolicyReplayBuffer(500_000),
         )
         self.assertTrue(
             target_return_is_reached(
