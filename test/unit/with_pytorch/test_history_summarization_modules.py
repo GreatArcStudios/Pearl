@@ -87,11 +87,13 @@ class TestHistorySummarizationModules(unittest.TestCase):
         Easy test for parallel mamba history summarization module.
         """
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        state_dim = self.observation_dim + self.action_dim
         summarization_module = MambaHistorySummarizationModule(
             observation_dim=self.observation_dim,
             action_dim=self.action_dim,
             history_length=self.history_length,
-            hidden_dim=self.observation_dim + self.action_dim,
+            hidden_dim=state_dim,
+            state_dim=state_dim,
             parallel_scan=True,
             device=device
         )
@@ -102,5 +104,5 @@ class TestHistorySummarizationModules(unittest.TestCase):
                 observation, action
             )
             self.assertEqual(
-                subjective_state.shape[0], self.observation_dim + self.action_dim
+                subjective_state.shape[0], state_dim
             )

@@ -51,6 +51,7 @@ from pearl.policy_learners.sequential_decision_making.soft_actor_critic_continuo
     ContinuousSoftActorCritic,
 )
 from pearl.policy_learners.sequential_decision_making.td3 import TD3
+from pearl.replay_buffers.sequential_decision_making.bootstrap_replay_buffer import BootstrapReplayBuffer
 from pearl.replay_buffers.sequential_decision_making.fifo_off_policy_replay_buffer import (
     FIFOOffPolicyReplayBuffer,
 )
@@ -99,6 +100,85 @@ class TestIntegration(unittest.TestCase):
                 action_representation_module=OneHotActionTensorRepresentationModule(
                     max_number_actions=num_actions
                 ),
+            ),
+            replay_buffer=FIFOOffPolicyReplayBuffer(10_000),
+        )
+        self.assertTrue(
+            target_return_is_reached(
+                target_return=500,
+                max_episodes=1000,
+                agent=agent,
+                env=env,
+                learn=True,
+                learn_after_episode=True,
+                exploit=False,
+            )
+        )
+
+    def test_dqn_lstm_summarization(self) -> None:
+        """
+        This test is checking if DQN will eventually get to 500 return for CartPole-v1
+        """
+        env = GymEnvironment("CartPole-v1")
+
+        assert isinstance(env.action_space, DiscreteActionSpace)
+        num_actions = env.action_space.n
+        agent = PearlAgent(
+            policy_learner=DeepQLearning(
+                state_dim=env.observation_space.shape[0],
+                action_space=env.action_space,
+                hidden_dims=[64, 64],
+                training_rounds=20,
+                action_representation_module=OneHotActionTensorRepresentationModule(
+                    max_number_actions=num_actions
+                ),
+            ),
+            history_summarization_module=LSTMHistorySummarizationModule(
+                observation_dim=env.observation_space.shape[0],
+                action_dim=env.action_space.shape[0],
+                hidden_dim=env.observation_space.shape[0]
+            ),
+            replay_buffer=FIFOOffPolicyReplayBuffer(10_000),
+        )
+        self.assertTrue(
+            target_return_is_reached(
+                target_return=500,
+                max_episodes=1000,
+                agent=agent,
+                env=env,
+                learn=True,
+                learn_after_episode=True,
+                exploit=False,
+            )
+        )
+
+    def test_dqn_mamba_summarization(self) -> None:
+        """
+        This test is checking if DQN will eventually get to 500 return for CartPole-v1
+        """
+        env = GymEnvironment("CartPole-v1")
+
+        assert isinstance(env.action_space, DiscreteActionSpace)
+        num_actions = env.action_space.n
+        state_dim = env.observation_space.shape[0]
+        agent = PearlAgent(
+            policy_learner=DeepQLearning(
+                state_dim=state_dim,
+                action_space=env.action_space,
+                hidden_dims=[64, 64],
+                training_rounds=20,
+                action_representation_module=OneHotActionTensorRepresentationModule(
+                    max_number_actions=num_actions
+                ),
+            ),
+            history_summarization_module=MambaHistorySummarizationModule(
+                observation_dim=env.observation_space.shape[0],
+                action_dim=env.action_space.shape[0],
+                num_layers=3,
+                history_length=3000,
+                parallel_scan=True,
+                hidden_dim=state_dim,
+                state_dim=state_dim
             ),
             replay_buffer=FIFOOffPolicyReplayBuffer(10_000),
         )
@@ -515,6 +595,7 @@ class TestIntegration(unittest.TestCase):
                 action_space=env.action_space,
                 actor_hidden_dims=[64, 64],
                 critic_hidden_dims=[64, 64],
+                actor_network_type=LSTMActorNetwork,
                 training_rounds=50,
                 batch_size=100,
                 entropy_coef=0.1,
@@ -631,7 +712,7 @@ class TestIntegration(unittest.TestCase):
                     std_dev=0.2,
                 ),
             ),
-            replay_buffer=FIFOOffPolicyReplayBuffer(50000),
+            replay_buffer=BootstrapReplayBuffer(50000, 1.0, 24),
         )
         self.assertTrue(
             target_return_is_reached(
@@ -698,16 +779,16 @@ class TestIntegration(unittest.TestCase):
         Due to randomness in games, we check on moving avarage of episode returns
         """
         env = GymEnvironment("Pendulum-v1")
-        state_dim = 512
+        state_dim = env.observation_space.shape[0] + env.action_space.shape[0]
         agent = PearlAgent(
             policy_learner=DeepDeterministicPolicyGradient(
                 state_dim=state_dim,
                 action_space=env.action_space,
                 actor_hidden_dims=[400, 300],
                 critic_hidden_dims=[400, 300],
-                critic_learning_rate=1e-8,
-                actor_learning_rate=1e-8,
-                training_rounds=5,
+                critic_learning_rate=1e-4,
+                actor_learning_rate=1e-4,
+                training_rounds=2,
                 actor_soft_update_tau=0.05,
                 critic_soft_update_tau=0.05,
                 exploration_module=NormalDistributionExploration(
@@ -718,10 +799,10 @@ class TestIntegration(unittest.TestCase):
             history_summarization_module=MambaHistorySummarizationModule(
                 observation_dim=env.observation_space.shape[0],
                 action_dim=env.action_space.shape[0],
-                num_layers=4,
-                history_length=20,
+                num_layers=3,
+                history_length=3000,
                 parallel_scan=True,
-                hidden_dim=256,
+                hidden_dim=state_dim,
                 state_dim=state_dim
             ),
             replay_buffer=FIFOOffPolicyReplayBuffer(500_000),
@@ -733,7 +814,7 @@ class TestIntegration(unittest.TestCase):
                 target_return=-250,
                 max_episodes=1000,
                 learn=True,
-                learn_after_episode=True,
+                learn_after_episode=False,
                 exploit=False,
                 check_moving_average=True,
             )

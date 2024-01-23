@@ -44,6 +44,7 @@ class MambaHistorySummarizationModule(HistorySummarizationModule):
         self.observation_dim = observation_dim
         self.action_dim = action_dim
         self.parallel_scan = parallel_scan
+        self.filled_history_idx = 1
         self.register_buffer("default_action", torch.zeros((1, action_dim)))
         self.register_buffer(
             "history",
@@ -55,7 +56,7 @@ class MambaHistorySummarizationModule(HistorySummarizationModule):
             action_dim=action_dim,
             pscan=parallel_scan,
             state_dim=state_dim,
-            num_mamba_layers=3,
+            num_mamba_layers=1,
             num_layers_per_block=num_layers,
             hidden_dim=hidden_dim,
             device=device
@@ -118,9 +119,14 @@ class MambaHistorySummarizationModule(HistorySummarizationModule):
             ],
             dim=0,
         )
-        out_batched = self.mamba(self.history)
+        # history fills from the back, so we need to keep track of the index
+        filled_history = self.history[-self.filled_history_idx:, :]
+        # reverse history as mamba expects it to be in reverse order
+        filled_history = torch.flip(filled_history, dims=[0])
+        self.filled_history_idx += 1
+        out_batched, out_resid_in, out_resid_mid, out_resid_out = self.mamba(filled_history, None, None, None)
         out_no_batch = out_batched.squeeze(0)
-        out_final = out_no_batch[-1, :].view((1, -1))
+        out_final = out_no_batch[0, :].view((1, -1))
         return out_final.squeeze(0)
 
     def get_history(self) -> torch.Tensor:
@@ -128,7 +134,7 @@ class MambaHistorySummarizationModule(HistorySummarizationModule):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size = x.shape[0]
-        out = self.mamba(x)
+        out, _, _, _ = self.mamba(x, None, None, None)
         return out[:, -1, :].view((batch_size, -1))
 
     def reset(self) -> None:
@@ -136,3 +142,4 @@ class MambaHistorySummarizationModule(HistorySummarizationModule):
             "history",
             torch.zeros((self.history_length, self.action_dim + self.observation_dim)),
         )
+        self.filled_history_idx = 1
